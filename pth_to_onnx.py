@@ -99,6 +99,7 @@ if __name__ == '__main__':
     config = parser.parse_args()
 
     if config.onnx_path is None:
-        config.onnx_path = os.path.join(config.model_save_path, config.dataset + '.onnx')
+        suffix = '_full.onnx' if config.full_output else '.onnx'
+        config.onnx_path = os.path.join(config.model_save_path, config.dataset + suffix)
 
     export(config)

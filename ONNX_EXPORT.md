@@ -27,7 +27,7 @@ python pth_to_onnx.py --dataset <DATASET> --input_c <IN> --output_c <OUT> --win_
 | `--output_c` | 38 | 출력 채널 수 |
 | `--win_size` | 100 | 윈도우 크기 |
 | `--model_save_path` | `checkpoints` | 체크포인트가 있는 디렉터리 |
-| `--onnx_path` | `{model_save_path}/{dataset}.onnx` | 저장 경로 |
+| `--onnx_path` | `{model_save_path}/{dataset}.onnx` (`--full_output` 시 `{dataset}_full.onnx`) | 저장 경로 |
 | `--device` | `cpu` | `cpu` 또는 `cuda` |
 | `--batch_size` | 1 | export용 더미 입력 배치 크기 (실제 추론 시 배치 축은 dynamic이라 자유롭게 바뀜) |
 | `--opset` | 14 | ONNX opset 버전 |

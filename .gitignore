@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Datasets and trained model artifacts (too large for git)
+dataset/
+checkpoints/
