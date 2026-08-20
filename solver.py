@@ -31,8 +31,8 @@ class EarlyStopping:
         self.best_score = None
         self.best_score2 = None
         self.early_stop = False
-        self.val_loss_min = np.Inf
-        self.val_loss2_min = np.Inf
+        self.val_loss_min = np.inf
+        self.val_loss2_min = np.inf
         self.delta = delta
         self.dataset = dataset_name
 
@@ -335,7 +335,7 @@ class Solver(object):
         print("pred:   ", pred.shape)
         print("gt:     ", gt.shape)
 
-        # detection adjustment
+        # detection adjustment: please see this issue for more information https://github.com/thuml/Anomaly-Transformer/issues/14
         anomaly_state = False
         for i in range(len(gt)):
             if gt[i] == 1 and pred[i] == 1 and not anomaly_state:
