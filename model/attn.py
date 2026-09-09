@@ -6,6 +6,8 @@ import math
 from math import sqrt
 import os
 
+from .onnx_ops import ExportableLayerNorm, safe_exp, safe_reciprocal
+
 
 class TriangularCausalMask():
     def __init__(self, B, L, device="cpu"):
@@ -37,7 +39,12 @@ class AnomalyAttention(nn.Module):
         _, S, _, D = values.shape
         scale = self.scale or 1. / sqrt(E)
 
-        scores = torch.einsum("blhe,bshe->bhls", queries, keys)
+        # torch.einsum("blhe,bshe->bhls", ...) exported literally as an ONNX Einsum node,
+        # which the target op whitelist doesn't include; permute + matmul is equivalent and
+        # only uses Transpose/MatMul.
+        q = queries.permute(0, 2, 1, 3)  # B H L E
+        k = keys.permute(0, 2, 1, 3)  # B H S E
+        scores = torch.matmul(q, k.transpose(-1, -2))  # B H L S
         if self.mask_flag:
             if attn_mask is None:
                 attn_mask = TriangularCausalMask(B, L, device=queries.device)
@@ -47,13 +54,28 @@ class AnomalyAttention(nn.Module):
         sigma = sigma.transpose(1, 2)  # B L H ->  B H L
         window_size = attn.shape[-1]
         sigma = torch.sigmoid(sigma * 5) + 1e-5
-        sigma = torch.pow(3, sigma) - 1
-        sigma = sigma.unsqueeze(-1).repeat(1, 1, 1, window_size)  # B H L L
-        prior = self.distances.unsqueeze(0).unsqueeze(0).repeat(sigma.shape[0], sigma.shape[1], 1, 1)
-        prior = 1.0 / (math.sqrt(2 * math.pi) * sigma) * torch.exp(-prior ** 2 / 2 / (sigma ** 2))
+        # torch.pow(3, sigma) - 1 == exp(sigma * ln(3)) - 1; safe_exp avoids the Pow/Exp ops
+        # (sigma is in (0, ~1) here, so the argument stays small and the sigmoid-based exp
+        # trick is numerically safe, see onnx_ops.safe_exp).
+        sigma = safe_exp(sigma * math.log(3)) - 1
+        # sigma.unsqueeze(-1).repeat(1, 1, 1, window_size) / distances.unsqueeze(0).unsqueeze(0)
+        # .repeat(...) both used Unsqueeze+Tile/Expand (not in the whitelist); reshape to add the
+        # broadcast dim instead, and let the elementwise ops below broadcast naturally (Mul/Div
+        # support broadcasting directly, no explicit tiling needed for the math itself).
+        sigma = sigma.reshape(sigma.shape[0], sigma.shape[1], sigma.shape[2], 1)  # B H L 1
+        prior_dist = self.distances.reshape(1, 1, window_size, window_size)  # 1 1 L L
+        dist_sq = prior_dist * prior_dist
+        sigma_sq = sigma * sigma
+        exponent = (0.0 - dist_sq) / (2.0 * sigma_sq)  # broadcasts to B H L L
+        prior = safe_reciprocal(math.sqrt(2 * math.pi) * sigma) * safe_exp(exponent)  # B H L L
+        # broadcast sigma up to the same B H L L shape the caller expects, via a genuine Mul
+        # (not Tile/Expand): multiplying by a same-shape ones tensor forces the broadcast.
+        sigma = sigma * torch.ones_like(prior_dist)
 
         series = self.dropout(torch.softmax(attn, dim=-1))
-        V = torch.einsum("bhls,bshd->blhd", series, values)
+        # torch.einsum("bhls,bshd->blhd", ...) rewritten the same way as the scores einsum above.
+        v = values.permute(0, 2, 1, 3)  # B H S D
+        V = torch.matmul(series, v).permute(0, 2, 1, 3)  # B L H D
 
         if self.output_attention:
             return (V.contiguous(), series, prior, sigma)
@@ -68,7 +90,7 @@ class AttentionLayer(nn.Module):
 
         d_keys = d_keys or (d_model // n_heads)
         d_values = d_values or (d_model // n_heads)
-        self.norm = nn.LayerNorm(d_model)
+        self.norm = ExportableLayerNorm(d_model)
         self.inner_attention = attention
         self.query_projection = nn.Linear(d_model,
                                           d_keys * n_heads)

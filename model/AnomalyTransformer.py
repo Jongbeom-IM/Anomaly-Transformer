@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 from .attn import AnomalyAttention, AttentionLayer
 from .embed import DataEmbedding, TokenEmbedding
+from .onnx_ops import ExportableLayerNorm, gelu_tanh
 
 
 class EncoderLayer(nn.Module):
@@ -13,10 +14,12 @@ class EncoderLayer(nn.Module):
         self.attention = attention
         self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1)
         self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1)
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
+        self.norm1 = ExportableLayerNorm(d_model)
+        self.norm2 = ExportableLayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-        self.activation = F.relu if activation == "relu" else F.gelu
+        # F.gelu is erf-based (Erf isn't in the target op whitelist); gelu_tanh is the
+        # standard tanh approximation, built only from Mul/Add/Tanh.
+        self.activation = F.relu if activation == "relu" else gelu_tanh
 
     def forward(self, x, attn_mask=None):
         new_x, attn, mask, sigma = self.attention(
@@ -76,7 +79,7 @@ class AnomalyTransformer(nn.Module):
                     activation=activation
                 ) for l in range(e_layers)
             ],
-            norm_layer=torch.nn.LayerNorm(d_model)
+            norm_layer=ExportableLayerNorm(d_model)
         )
 
         self.projection = nn.Linear(d_model, c_out, bias=True)
