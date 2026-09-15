@@ -65,3 +65,28 @@ def safe_reciprocal(x):
     plain Div node.
     """
     return torch.ones_like(x) / x
+
+
+class _MatmulTransB(torch.autograd.Function):
+    """a @ b.t() that exports as a single Gemm(transB=1) node instead of Transpose+MatMul.
+
+    The default ONNX symbolic for `a.matmul(b.t())` (and for F.linear against a non-parameter
+    weight) traces the transpose literally, emitting a 2D Transpose(perm=[0,1] reversed).
+    Klepsydra's ONNX importer rejects that Transpose ("unsupported permutation") even though
+    it's exactly what Gemm's transB attribute is for, so this bypasses the default tracing and
+    emits the Gemm node directly. Used for the per-head Q@K^T product in
+    AnomalyAttention._forward_export (see model/attn.py) since the head-splitting Transpose
+    that a batched implementation would need (perm=[0,2,1,3]) isn't supported either.
+    """
+
+    @staticmethod
+    def forward(ctx, a, b):
+        return a.matmul(b.t())
+
+    @staticmethod
+    def symbolic(g, a, b):
+        return g.op('Gemm', a, b, transB_i=1, alpha_f=1.0, beta_f=0.0)
+
+
+def matmul_transb(a, b):
+    return _MatmulTransB.apply(a, b)

@@ -1,6 +1,6 @@
 # PyTorch(.pth) → ONNX 변환
 
-`pth_to_onnx.py`로 학습된 체크포인트(`checkpoints/{dataset}_checkpoint.pth`)를 ONNX로 변환합니다.
+`pth_to_onnx.py`로 학습된 체크포인트(`checkpoint/{dataset}_checkpoint.pth`)를 ONNX로 변환합니다.
 
 ## 요구 패키지
 
@@ -22,15 +22,15 @@ python pth_to_onnx.py --dataset <DATASET> --input_c <IN> --output_c <OUT> --win_
 
 | 인자 | 기본값 | 설명 |
 |---|---|---|
-| `--dataset` | (필수) | 체크포인트 파일명 접두사 (`checkpoints/{dataset}_checkpoint.pth`) |
+| `--dataset` | (필수) | 체크포인트 파일명 접두사 (`{model_save_path}/{dataset}_checkpoint.pth`) |
 | `--input_c` | 38 | 입력 채널 수 |
 | `--output_c` | 38 | 출력 채널 수 |
 | `--win_size` | 100 | 윈도우 크기 |
-| `--model_save_path` | `checkpoints` | 체크포인트가 있는 디렉터리 |
+| `--model_save_path` | `checkpoints` | 체크포인트가 있는 디렉터리 (이 저장소에서는 실제로 `checkpoint/`이므로 `--model_save_path checkpoint`를 명시해야 함) |
 | `--onnx_path` | `{model_save_path}/{dataset}.onnx` (`--full_output` 시 `{dataset}_full.onnx`) | 저장 경로 |
 | `--device` | `cpu` | `cpu` 또는 `cuda` |
-| `--batch_size` | 1 | export용 더미 입력 배치 크기 (실제 추론 시 배치 축은 dynamic이라 자유롭게 바뀜) |
-| `--opset` | 14 | ONNX opset 버전 |
+| `--batch_size` | 1 | export용 더미 입력 배치 크기 (Klepsydra AI는 배치 추론을 지원하지 않으므로 `--static_batch`와 함께 항상 1이어야 함) |
+| `--opset` | 12 | ONNX opset 버전. Klepsydra AI ONNX Loader가 opset 12까지만 지원함(`ref/Klepsydra AI ONNX Loader V25.5.5.pdf` p.4, GR740 Appendix p.10에서 재확인)을 근거로 기본값을 12로 낮춤 |
 | `--full_output` | off | reconstruction 외에 series/prior/sigma(레이어별)까지 export |
 
 ### 예시
@@ -78,8 +78,11 @@ python pth_to_onnx.py --dataset SMD --input_c 38 --output_c 38 --win_size 100 --
 
 ```bash
 python pth_to_onnx.py --dataset SMD --input_c 38 --output_c 38 --win_size 100 --full_output --static_batch \
+  --model_save_path checkpoint --onnx_path checkpoint/onnx/SMD_full.onnx \
   --op_whitelist "Abs,Add,AveragePool,BatchNormalization,Cast,Clip,Concat,Constant,Conv,ConvTranspose,DequantizeLinear,Div,Dropout,Elu,Flatten,Gemm,GlobalAveragePool,InstanceNormalization,LSTM,LeakyRelu,MatMul,MaxPool,Mul,PRelu,Pad,QGemm,QLinearAdd,QLinearAveragePool,QLinearConcat,QLinearConv,QLinearGlobalAveragePool,QLinearLeakyRelu,QLinearMatMul,QLinearMul,QLinearSigmoid,QuantizeLinear,Relu,Reshape,Resize,Shape,Sigmoid,Slice,Softmax,Squeeze,Sub,Sum,Tanh,Transpose"
 ```
+
+(`--opset`을 따로 주지 않으면 기본값 12가 적용됩니다.)
 
 **`--static_batch`는 필수입니다.** 이 플래그 없이 export하면(batch 축을 dynamic으로 두면) PyTorch가 배치 크기를 런타임에 읽어오려고 `Shape`+`Gather`+`Unsqueeze`+`ConstantOfShape`/`Expand` 노드를 추가로 생성하는데, 이 중 `Gather`/`Unsqueeze`는 whitelist에 없습니다. `--static_batch`를 주면 `--batch_size`(기본 1)가 그래프에 고정되어 이 노드들이 아예 생기지 않습니다. NPU 배포는 대개 배치=1로 고정 운용하므로 실사용에 문제 없습니다.
 
@@ -95,4 +98,19 @@ python pth_to_onnx.py --dataset SMD --input_c 38 --output_c 38 --win_size 100 --
 ### 남은 주의사항
 
 - `AnomalyAttention`은 이 저장소에서 항상 `mask_flag=False`로 생성되므로(인코더 셀프어텐션, causal mask 미사용) `masked_fill_`(→ `Where`) 경로는 실제로 export되지 않습니다. causal mask를 쓰는 다른 용도로 재사용한다면 그 경로도 별도로 손봐야 합니다.
-- Conv1d의 `circular` padding(`model/embed.py`)은 opset 14에서 이미 `Slice`+`Concat`으로 분해되어 export되므로 추가 수정이 필요 없었습니다.
+- Conv1d의 `circular` padding(`model/embed.py`)은 opset 12/14 어느 쪽에서도 이미 `Slice`+`Concat`으로 분해되어 export되므로 추가 수정이 필요 없었습니다.
+
+### 2026-09-09: `ref/` 3종 문서 전체 반영 — opset 12로 하향, checkpoint 4종 전부 재-export
+
+`ref/`에 있는 Klepsydra 문서 3종(`Klepsydra AI ONNX Loader V25.5.5.pdf`, `Getting Started Klepsydra AI V25.5.5.pdf`, `Getting Started Klepsydra AI GR740 Appendix V25.5.5.pdf`)을 전부 확인한 결과, 지금까지 반영되지 않았던 제약이 하나 더 있었습니다.
+
+- **opset 상한 = 12.** `Klepsydra AI ONNX Loader` 가이드 p.4: "Klepsydra AI can load models in the ONNX format, with support for opset up to version 12." GR740 Appendix p.10에서도 "Klepsydra AI supports ONNX models up to opset version 12 and requires the channel-last data format"로 동일하게 재확인됩니다. 그런데 `pth_to_onnx.py`의 기존 기본값은 `--opset 14`였고 `scripts/pth_to_onnx*.sh`도 opset을 지정하지 않아 14로 export되고 있었습니다. op 목록 자체는 opset 12/14 모두에서 whitelist를 만족하지만(둘 다 실측 확인), opset 14로 선언된 그래프는 opset 12까지만 지원하는 Klepsydra 로더가 아예 거부할 수 있어 기본값을 **12**로 낮췄습니다(`pth_to_onnx.py`).
+- **배치=1, channel-last 입력**: GR740 Appendix p.10과 Getting Started 가이드 p.17("Network expects input of shape [batch = 1, ...] with channels as the innermost (last) dimension")이 기존에 이미 적용해둔 `--static_batch`(배치=1 고정)와, 이 모델의 입력 형태 `[batch, win_size, channel]`(채널이 마지막 축)이 정확히 요구사항과 일치함을 재확인해줍니다. 추가 조치 불필요.
+- 나머지(Supported Layers 목록, onnxsim 권장, `kpsr_ai_onnx_compatible_checker_app`은 x86 호스트 전용 도구라는 점 등)는 기존에 반영된 내용과 일치하며 새로운 제약은 없었습니다. GR740 자체의 메모리 상한(구체적 수치는 문서에 미기재, 초과 시 런타임 할당 실패로만 언급)이나 RTEMS 타겟에서의 `.kpsr` 정적 링크 요구사항은 이 저장소의 export 단계(`pth_to_onnx.py`) 범위 밖이라 별도 조치하지 않았습니다.
+
+**실행한 작업**: 이 환경(`torch==2.1.2`)에서 실제로 export를 돌리기 위해 두 가지 호환성 이슈도 함께 고쳤습니다.
+
+- `torch.onnx.export(..., dynamo=False)`: `dynamo` 인자는 최신 torch(2.5+)에서 추가된 것으로, 이 환경의 torch 2.1.2에는 없어 `TypeError`가 났습니다. `inspect.signature`로 지원 여부를 확인해 있을 때만 넘기도록 수정했습니다(torch 2.1.2는 애초에 항상 legacy TorchScript 기반 exporter를 쓰므로 동작은 동일합니다).
+- `onnx`/`onnxruntime-gpu`/`onnxsim`을 새로 설치하며 `numpy` 2.x가 함께 들어왔는데, 이미 설치돼 있던 torch 2.1.2는 numpy 1.x ABI로 빌드되어 있어 `.numpy()` 호출이 깨졌습니다. `numpy<2`(1.26.4)로 다운그레이드해 해결했습니다.
+
+**실행 결과**: `bash scripts/pth_to_onnx.sh`와 `bash scripts/pth_to_onnx-full.sh`로 4개 데이터셋(SMD/MSL/SMAP/PSM) × 2종(reconstruction-only/full_output) = 8개 파일을 `checkpoint/onnx/`에 새로 생성했습니다. 전부 `opset=12`, 입력 shape `[1, 100, {input_c}]`(정적 배치, channel-last)로 확인했고, `--op_whitelist` 체크 결과 8개 파일 모두 `All ops are within --op_whitelist.`였습니다. PyTorch 대비 최대 절대오차는 이전 절(§검증, §2026-09-07)에서 설명한 것과 같은 패턴입니다 — 대부분 1e-2 이하이며, `prior_0`류 레이어에서 sigma가 하한(~1e-5)에 가까울 때 `1/sigma` 특이점으로 절대오차가 커지는 경우(예: SMD `prior_0` 최대 절대오차 1.44)가 있으나 정상적인 부동소수점 거동입니다.

@@ -1,0 +1,14 @@
+Input file provided: 	repro_transpose_conv1d.onnx
+Output filename : 	/tmp/out2.kpsr
+virtual bool kpsr::mem::SimpleMemEnv::getPropertyBool(const string&, bool&, bool, const string&): Key 'log_sdo_enable' not found. Using default value 'false'
+virtual bool kpsr::mem::SimpleMemEnv::getPropertyString(const string&, std::string&, const string&, const string&): Key 'log_filename' not found. Using default value ''
+virtual bool kpsr::mem::SimpleMemEnv::getPropertyString(const string&, std::string&, const string&, const string&): Key 'log_sdo_filename' not found. Using default value ''
+[Fri Sep 11 03:08:10 2026] [03:08:10 786883] [klepsydra] [info] [1] Reading onnx data from file repro_transpose_conv1d.onnx
+[Fri Sep 11 03:08:10 2026] [03:08:10 786961] [klepsydra] [info] [1] Converting network from onnx format to Klepsydra format
+[Fri Sep 11 03:08:10 2026] [03:08:10 787228] [klepsydra] [info] [1] Processing a time series
+[Fri Sep 11 03:08:10 2026] [03:08:10 787232] [klepsydra] [info] [1] Network expects input of shape [1, 100, 38] (with channels as the innermost (last) dimension)
+[Fri Sep 11 03:08:10 2026] [03:08:10 787234] [klepsydra] [info] [1] Onnx node of type Transpose has no name. Setting it to Transpose_x_nchw instead. Ensure that onnx nodes have non-empty names.
+Cannot parse layer : Transpose_x_nchwwith type	 Transpose
+Transpose given unsupported permutation
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Transpose given unsupported permutation

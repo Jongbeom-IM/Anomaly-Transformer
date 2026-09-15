@@ -1,9 +1,11 @@
 import argparse
+import inspect
 import os
 
 import torch
 
 from model.AnomalyTransformer import AnomalyTransformer
+from model.attn import AnomalyAttention
 
 
 class ReconstructionOnly(torch.nn.Module):
@@ -19,6 +21,9 @@ class ReconstructionOnly(torch.nn.Module):
 
 
 def export(config):
+    assert config.batch_size == 1, \
+        "--batch_size must be 1: AnomalyAttention's export-mode per-head attention (see " \
+        'model/attn.py) assumes a single batch element.'
     device = torch.device(config.device)
 
     model = AnomalyTransformer(
@@ -34,6 +39,10 @@ def export(config):
     model.eval()
 
     export_model = model if config.full_output else ReconstructionOnly(model)
+
+    for m in model.modules():
+        if isinstance(m, AnomalyAttention):
+            m.export_mode = True
 
     dummy_input = torch.randn(config.batch_size, config.win_size, config.input_c, device=device)
 
@@ -58,16 +67,17 @@ def export(config):
         for name in output_names:
             dynamic_axes[name] = {0: 'batch'}
 
-    torch.onnx.export(
-        export_model,
-        dummy_input,
-        config.onnx_path,
+    export_kwargs = dict(
         input_names=['input'],
         output_names=output_names,
         dynamic_axes=dynamic_axes,
         opset_version=config.opset,
-        dynamo=False,
     )
+    if 'dynamo' in inspect.signature(torch.onnx.export).parameters:
+        # Force the legacy TorchScript-based exporter: the op-whitelist substitutions in
+        # model/onnx_ops.py were verified against its output graph, not torch.export's.
+        export_kwargs['dynamo'] = False
+    torch.onnx.export(export_model, dummy_input, config.onnx_path, **export_kwargs)
     print(f'Exported to {config.onnx_path} (outputs: {output_names})')
 
     import onnx
@@ -127,7 +137,9 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'])
     parser.add_argument('--batch_size', type=int, default=1,
                          help='batch size used for the dummy export input; batch axis is dynamic in the ONNX graph')
-    parser.add_argument('--opset', type=int, default=14)
+    parser.add_argument('--opset', type=int, default=12,
+                         help='Klepsydra AI ONNX Loader supports opset up to version 12 (see ref/ '
+                              'Klepsydra AI ONNX Loader guide); higher opsets are not guaranteed to load')
     parser.add_argument('--full_output', action='store_true',
                          help='export series/prior/sigma attention outputs in addition to the reconstruction '
                               '(needed to reproduce the association-discrepancy anomaly score outside PyTorch)')

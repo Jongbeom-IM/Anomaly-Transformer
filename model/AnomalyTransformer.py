@@ -28,8 +28,13 @@ class EncoderLayer(nn.Module):
         )
         x = x + self.dropout(new_x)
         y = x = self.norm1(x)
-        y = self.dropout(self.activation(self.conv1(y.transpose(-1, 1))))
-        y = self.dropout(self.conv2(y).transpose(-1, 1))
+        # conv1/conv2 have kernel_size=1, so they're pointwise across the channel dim; applying
+        # them via F.linear on the un-transposed (channel-last) tensor is mathematically
+        # identical to Conv1d(kernel_size=1) sandwiched between the transposes it would
+        # otherwise need, and avoids emitting a 3D Transpose that Klepsydra's ONNX importer
+        # doesn't support (see TokenEmbedding.forward in model/embed.py for the same issue).
+        y = self.dropout(self.activation(F.linear(y, self.conv1.weight.squeeze(-1), self.conv1.bias)))
+        y = self.dropout(F.linear(y, self.conv2.weight.squeeze(-1), self.conv2.bias))
 
         return self.norm2(x + y), attn, mask, sigma
 

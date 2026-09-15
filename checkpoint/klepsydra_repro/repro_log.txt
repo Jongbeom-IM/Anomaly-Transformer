@@ -1,0 +1,22 @@
+Input file provided: 	repro_matmul_dynamic.onnx
+Output filename : 	/tmp/out.kpsr
+virtual bool kpsr::mem::SimpleMemEnv::getPropertyBool(const string&, bool&, bool, const string&): Key 'log_sdo_enable' not found. Using default value 'false'
+virtual bool kpsr::mem::SimpleMemEnv::getPropertyString(const string&, std::string&, const string&, const string&): Key 'log_filename' not found. Using default value ''
+virtual bool kpsr::mem::SimpleMemEnv::getPropertyString(const string&, std::string&, const string&, const string&): Key 'log_sdo_filename' not found. Using default value ''
+[Fri Sep 11 03:07:55 2026] [03:07:55 047046] [klepsydra] [info] [1] Reading onnx data from file repro_matmul_dynamic.onnx
+[Fri Sep 11 03:07:55 2026] [03:07:55 047196] [klepsydra] [info] [1] Converting network from onnx format to Klepsydra format
+[Fri Sep 11 03:07:55 2026] [03:07:55 047267] [klepsydra] [info] [1] Network expects input of shape [batch = 1, [1, 1, 100]] (with channels as the innermost (last) dimension)
+[Fri Sep 11 03:07:55 2026] [03:07:55 047271] [klepsydra] [info] [1] Onnx node of type Softmax has no name. Setting it to Softmax_series instead. Ensure that onnx nodes have non-empty names.
+[Fri Sep 11 03:07:55 2026] [03:07:55 047466] [klepsydra] [info] [1] Onnx node of type Softmax has no name. Setting it to Softmax_series instead. Ensure that onnx nodes have non-empty names.
+[Fri Sep 11 03:07:55 2026] [03:07:55 047472] [klepsydra] [info] [1] Onnx node of type Softmax has no name. Setting it to Softmax_series instead. Ensure that onnx nodes have non-empty names.
+[Fri Sep 11 03:07:55 2026] [03:07:55 047476] [klepsydra] [info] [1] Onnx node of type MatMul has no name. Setting it to MatMul_out instead. Ensure that onnx nodes have non-empty names.
+[Fri Sep 11 03:07:55 2026] [03:07:55 047497] [klepsydra] [error] [1] Fully connected gets second input from another layer. Currently not supported
+[Fri Sep 11 03:07:55 2026] [03:07:55 047499] [klepsydra] [info] [1] Onnx node of type MatMul has no name. Setting it to MatMul_out instead. Ensure that onnx nodes have non-empty names.
+[Fri Sep 11 03:07:55 2026] [03:07:55 047505] [klepsydra] [info] [1] Onnx node of type MatMul has no name. Setting it to MatMul_out instead. Ensure that onnx nodes have non-empty names.
+[Fri Sep 11 03:07:55 2026] [03:07:55 047508] [klepsydra] [info] [1] Onnx node of type Softmax has no name. Setting it to Softmax_series instead. Ensure that onnx nodes have non-empty names.
+[Fri Sep 11 03:07:55 2026] [03:07:55 047512] [klepsydra] [info] [1] Onnx node of type MatMul has no name. Setting it to MatMul_out instead. Ensure that onnx nodes have non-empty names.
+[Fri Sep 11 03:07:55 2026] [03:07:55 047515] [klepsydra] [info] [1] Onnx node of type Softmax has no name. Setting it to Softmax_series instead. Ensure that onnx nodes have non-empty names.
+[Fri Sep 11 03:07:55 2026] [03:07:55 047526] [klepsydra] [info] [1] Network conversion successful. Starting serialization to disk
+[Fri Sep 11 03:07:55 2026] [03:07:55 047528] [klepsydra] [info] [1] Converted network expects input of size [1, 1, 100]
+[Fri Sep 11 03:07:55 2026] [03:07:55 047680] [klepsydra] [info] [1] Network serialized to Klespydra binary format
+[Fri Sep 11 03:07:55 2026] [03:07:55 047682] [klepsydra] [info] [1] Network successfully saved to file /tmp/out.kpsr
